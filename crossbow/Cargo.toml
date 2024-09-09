@@ -1,0 +1,13 @@
+[package]
+name = "crossbow"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+calamine = "0.19"
+arrow = "33.0.0"
+pyo3 = { version = "0.18", features = ["extension-module"] }
+
+[build-system]
+requires = ["maturin>=0.14.1"]
+build-backend = "maturin"

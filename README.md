@@ -1,1 +1,1 @@
-# Code repository for Data 051 - Introduction to Data Science
+# Data 051 - Introduction to Data Science

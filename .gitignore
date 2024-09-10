@@ -1,1 +1,5 @@
 venv
+crossbow/target/
+crossbow/Cargo.lock
+ironmath/target/
+ironmath/Cargo.lock

@@ -1,8 +1,11 @@
-use pyo3::{pyfunction, pymodule, wrap_pyfunction, PyResult};
+use pyo3::{Python, pyfunction, pymodule, wrap_pyfunction, PyResult};
+use pyo3::types::PyModule;
 #[cfg(target_arch = "x86_64")]
 use std::arch::x86_64::*;
 #[cfg(target_arch = "aarch64")]
 use std::arch::aarch64::*;
+
+
 
 fn chebyshev_sin(mut x: f64) -> f64 {
     // Constants
@@ -32,27 +35,11 @@ fn chebyshev_sin(mut x: f64) -> f64 {
 fn newton_sqrt(x: f64) -> f64 {
     let mut guess = x / 2.0;
     for _ in 0..10 {
-        guess = (guess + x / guess)
+        guess = guess + x / guess
     }
     guess
 }
 
-/// Generic SIMD-based dot product function with conditional compilation
-pub fn dot_product_fe(a: &[f32], b: &[f32]) -> f32 {
-    if a.len() != b.len() {
-        panic!("Vectors must have the same length");
-    }
-
-    unsafe {
-        if cfg!(target_arch = "x86_64") {
-            dot_product_x86(a, b)
-        } else if cfg!(target_arch = "aarch64") {
-            dot_product_arm(a, b)
-        } else {
-            panic!("Unsupported architecture")
-        }
-    }
-}
 
 /// SIMD-based dot product for x86_64 (SSE/AVX intrinsics)
 #[cfg(target_arch = "x86_64")]
@@ -69,6 +56,31 @@ unsafe fn dot_product_x86(a: &[f32], b: &[f32]) -> f32 {
     let sum_arr: [f32; 4] = std::mem::transmute(sum);
     sum_arr.iter().sum()
 }
+
+/// Generic SIMD-based dot product function with conditional compilation
+pub fn dot_product_fe(a: &[f32], b: &[f32]) -> f32 {
+    if a.len() != b.len() {
+        panic!("Vectors must have the same length");
+    }
+
+    // Use architecture-specific SIMD implementation
+    #[cfg(target_arch = "x86_64")]
+    {
+        unsafe { dot_product_x86(a, b) }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { dot_product_arm(a, b) }
+    }
+
+    // Fallback for unsupported architectures
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        panic!("Error: Unsupported Architecture");
+    }
+}
+
 
 /// SIMD-based dot product for ARM (NEON intrinsics)
 #[cfg(target_arch = "aarch64")]
@@ -191,6 +203,30 @@ fn pad_matrix(matrix: &[Vec<f64>], rows: usize, cols: usize) -> Vec<Vec<f64>> {
     padded_matrix
 }
 
+/// Splits a matrix into four submatrices (quadrants)
+fn split_matrix(matrix: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>) {
+    let n = matrix.len();
+    let half_size = n / 2;
+
+    // Create four new submatrices
+    let mut a11 = vec![vec![0.0; half_size]; half_size];
+    let mut a12 = vec![vec![0.0; half_size]; half_size];
+    let mut a21 = vec![vec![0.0; half_size]; half_size];
+    let mut a22 = vec![vec![0.0; half_size]; half_size];
+
+    // Fill submatrices by splitting the original matrix into quadrants
+    for i in 0..half_size {
+        for j in 0..half_size {
+            a11[i][j] = matrix[i][j];
+            a12[i][j] = matrix[i][j + half_size];
+            a21[i][j] = matrix[i + half_size][j];
+            a22[i][j] = matrix[i + half_size][j + half_size];
+        }
+    }
+
+    (a11, a12, a21, a22)
+}
+
 /// Unpads a padded matrix back to its original size
 fn unpad_matrix(matrix: Vec<Vec<f64>>, rows: usize, cols: usize) -> Vec<Vec<f64>> {
     matrix
@@ -198,6 +234,115 @@ fn unpad_matrix(matrix: Vec<Vec<f64>>, rows: usize, cols: usize) -> Vec<Vec<f64>
         .take(rows)
         .map(|row| row.into_iter().take(cols).collect())
         .collect()
+}
+
+#[cfg(target_arch = "x86_64")]
+use std::arch::x86_64::*;
+
+/// SIMD-optimized matrix addition for x86_64 (AVX)
+#[cfg(target_arch = "x86_64")]
+unsafe fn simd_add_matrix_x86(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let n = a.len();
+    let mut result = vec![vec![0.0; n]; n];
+
+    for i in 0..n {
+        for j in (0..n).step_by(4) {
+            let va = _mm256_loadu_pd(&a[i][j]);  // Load 4 elements from matrix a
+            let vb = _mm256_loadu_pd(&b[i][j]);  // Load 4 elements from matrix b
+            let vsum = _mm256_add_pd(va, vb);    // Perform addition
+            _mm256_storeu_pd(&mut result[i][j], vsum);  // Store result
+        }
+    }
+    result
+}
+
+/// SIMD-optimized matrix addition for ARM (NEON)
+#[cfg(target_arch = "aarch64")]
+unsafe fn simd_add_matrix_arm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let n = a.len();
+    let mut result = vec![vec![0.0; n]; n];
+
+    for i in 0..n {
+        for j in (0..n).step_by(2) {
+            let va = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
+            let vb = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
+            let vsum = vaddq_f64(va, vb);  // Perform addition
+            vst1q_f64(&mut result[i][j], vsum);  // Store result
+        }
+    }
+    result
+}
+
+/// SIMD-optimized matrix subtraction for x86_64 (AVX)
+#[cfg(target_arch = "x86_64")]
+unsafe fn simd_sub_matrix_x86(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let n = a.len();
+    let mut result = vec![vec![0.0; n]; n];
+
+    for i in 0..n {
+        for j in (0..n).step_by(4) {  // Process 4 elements at a time
+            let va = _mm256_loadu_pd(&a[i][j]);  // Load 4 elements from matrix a
+            let vb = _mm256_loadu_pd(&b[i][j]);  // Load 4 elements from matrix b
+            let vres = _mm256_sub_pd(va, vb);    // Perform subtraction: a[i][j] - b[i][j]
+            _mm256_storeu_pd(&mut result[i][j], vres);  // Store the result
+        }
+    }
+    result
+}
+
+/// SIMD-optimized matrix subtraction for ARM (NEON)
+#[cfg(target_arch = "aarch64")]
+unsafe fn simd_sub_matrix_arm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    let n = a.len();
+    let mut result = vec![vec![0.0; n]; n];
+
+    for i in 0..n {
+        for j in (0..n).step_by(2) {  // Process 2 elements at a time
+            let va = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
+            let vb = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
+            let vres = vsubq_f64(va, vb);  // Perform subtraction: a[i][j] - b[i][j]
+            vst1q_f64(&mut result[i][j], vres);  // Store the result
+        }
+    }
+    result
+}
+
+fn sub_matrix(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+   // Use architecture-specific SIMD implementation
+   #[cfg(target_arch = "x86_64")]
+   {
+       unsafe { simd_sub_matrix_x86(&a, &b) }
+   }
+
+   #[cfg(target_arch = "aarch64")]
+   {
+       unsafe { simd_sub_matrix_arm(&a, &b) }
+   }
+
+   // Fallback for unsupported architectures
+   #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+   {
+       panic!("Error: Unsupported Architecture");
+   } 
+}
+
+fn add_matrix(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
+    // Use architecture-specific SIMD implementation
+    #[cfg(target_arch = "x86_64")]
+    {
+        unsafe { simd_add_matrix_x86(&a, &b) }
+    }
+
+    #[cfg(target_arch = "aarch64")]
+    {
+        unsafe { simd_add_matrix_arm(&a, &b) }
+    }
+
+    // Fallback for unsupported architectures
+    #[cfg(not(any(target_arch = "x86_64", target_arch = "aarch64")))]
+    {
+        panic!("Error: Unsupported Architecture");
+    }
 }
 
 /// Strassen's matrix multiplication with a threshold for switching to traditional multiplication
@@ -256,17 +401,60 @@ fn strassen_with_padding(a: &[Vec<f64>], b: &[Vec<f64>], threshold: usize) -> Ve
     unpad_matrix(result_padded, a_rows, b_cols)
 }
 
+/// Merges four submatrices into a single matrix
+fn merge_matrix(
+    c11: Vec<Vec<f64>>, 
+    c12: Vec<Vec<f64>>, 
+    c21: Vec<Vec<f64>>, 
+    c22: Vec<Vec<f64>>
+) -> Vec<Vec<f64>> {
+    let half_size = c11.len();  // Size of submatrices
+    let n = half_size * 2;      // Size of the full matrix
+
+    // Initialize the resulting matrix with the correct size
+    let mut result = vec![vec![0.0; n]; n];
+
+    // Fill in the top-left (c11)
+    for i in 0..half_size {
+        for j in 0..half_size {
+            result[i][j] = c11[i][j];
+        }
+    }
+
+    // Fill in the top-right (c12)
+    for i in 0..half_size {
+        for j in 0..half_size {
+            result[i][j + half_size] = c12[i][j];
+        }
+    }
+
+    // Fill in the bottom-left (c21)
+    for i in 0..half_size {
+        for j in 0..half_size {
+            result[i + half_size][j] = c21[i][j];
+        }
+    }
+
+    // Fill in the bottom-right (c22)
+    for i in 0..half_size {
+        for j in 0..half_size {
+            result[i + half_size][j + half_size] = c22[i][j];
+        }
+    }
+
+    result
+}
+
 #[pyfunction]
 fn sin(x: f64) -> PyResult<f64> {
-    result = chebyshev_sin(x);
+    let result = chebyshev_sin(x);
     Ok(result)
 }
 
 #[pyfunction]
-fn matrix_mult(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>, threshold: usize) -> PyResult<Vec<Vec<f64>>> {
-    let n = a.len();
-    let m = b.len();
-    const THRESHOLD: f64 = 2.0;
+fn matrix_mult(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
+
+    const THRESHOLD: usize = 2;
 
     // Perform Strassen's multiplication
     let result = strassen_with_padding(&a, &b, THRESHOLD);
@@ -274,8 +462,13 @@ fn matrix_mult(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>, threshold: usize) -> PyResult
 }
 
 #[pyfunction]
+fn sqrt(x: f64) -> f64 {
+    newton_sqrt(x)
+}
+
+#[pyfunction]
 fn dot_product(a: Vec<f32>, b: Vec<f32>) -> PyResult<f32> {
-    ans = dot_product_fe(&a, &b);
+    let ans: f32 = dot_product_fe(&a, &b);
     Ok(ans)
     
 }

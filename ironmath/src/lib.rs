@@ -23,17 +23,17 @@ fn chebyshev_sin(mut x: f64) -> f64 {
     x = x % TWO_PI;
 
     // Use symmetry to reduce the range to [0, pi/2]
-    let sign = if x > PI { -1.0 } else { 1.0 };
+    let sign: f64 = if x > PI { -1.0 } else { 1.0 };
     x = if x > PI { x - PI } else { x };
     x = if x > HALF_PI { PI - x } else { x };
 
     // Apply Chebyshev polynomial approximation for sin(x) in [0, pi/2]
-    let x2 = x * x;
+    let x2: f64 = x * x;
     x * (1.0 + C1 * x2 + C2 * x2 * x2 + C3 * x2 * x2 * x2 + C4 * x2 * x2 * x2 * x2) * sign
 }
 
 fn newton_sqrt(x: f64) -> f64 {
-    let mut guess = x / 2.0;
+    let mut guess: f64 = x / 2.0;
     for _ in 0..10 {
         guess = guess + x / guess
     }
@@ -85,11 +85,11 @@ pub fn dot_product_fe(a: &[f32], b: &[f32]) -> f32 {
 /// SIMD-based dot product for ARM (NEON intrinsics)
 #[cfg(target_arch = "aarch64")]
 unsafe fn dot_product_arm(a: &[f32], b: &[f32]) -> f32 {
-    let mut sum = vdupq_n_f32(0.0);
+    let mut sum: float32x4_t = vdupq_n_f32(0.0);
     
     for i in (0..a.len()).step_by(4) {
-        let va = vld1q_f32(&a[i]);
-        let vb = vld1q_f32(&b[i]);
+        let va: float32x4_t = vld1q_f32(&a[i]);
+        let vb: float32x4_t = vld1q_f32(&b[i]);
         sum = vmlaq_f32(sum, va, vb);
     }
 
@@ -131,22 +131,22 @@ unsafe fn simd_traditional_mult_x86(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f
 /// SIMD-optimized traditional matrix multiplication for ARM (NEON)
 #[cfg(target_arch = "aarch64")]
 unsafe fn simd_traditional_mult_arm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let m = b[0].len();
-    let p = b.len();
+    let n: usize = a.len();
+    let m: usize = b[0].len();
+    let p: usize = b.len();
     
     // Initialize result matrix with zeros
-    let mut result = vec![vec![0.0; m]; n];
+    let mut result: Vec<Vec<f64>> = vec![vec![0.0; m]; n];
     
     // Perform matrix multiplication using SIMD
     for i in 0..n {
         for j in 0..m {
-            let mut sum = vdupq_n_f64(0.0);  // Initialize SIMD sum for NEON
+            let mut sum: float64x2_t = vdupq_n_f64(0.0);  // Initialize SIMD sum for NEON
             
             // Process 2 elements at a time using SIMD (for 128-bit NEON)
             for k in (0..p).step_by(2) {
-                let va = vld1q_f64(&a[i][k]);  // Load 2 elements from row i of matrix a
-                let vb = vld1q_f64(&b[k][j]);  // Load 2 elements from column j of matrix b
+                let va: float64x2_t = vld1q_f64(&a[i][k]);  // Load 2 elements from row i of matrix a
+                let vb: float64x2_t = vld1q_f64(&b[k][j]);  // Load 2 elements from column j of matrix b
                 sum = vfmaq_f64(sum, va, vb);  // Multiply and accumulate (fused multiply-add)
             }
 
@@ -182,7 +182,7 @@ fn next_power_of_two(n: usize) -> usize {
     if n == 0 {
         return 1;
     }
-    let mut power = 1;
+    let mut power: usize = 1;
     while power < n {
         power <<= 1;
     }
@@ -191,10 +191,10 @@ fn next_power_of_two(n: usize) -> usize {
 
 /// Pads a matrix to the given rows and columns size with zeroes
 fn pad_matrix(matrix: &[Vec<f64>], rows: usize, cols: usize) -> Vec<Vec<f64>> {
-    let original_rows = matrix.len();
-    let original_cols = matrix[0].len();
+    let original_rows: usize = matrix.len();
+    let original_cols: usize = matrix[0].len();
     
-    let mut padded_matrix = vec![vec![0.0; cols]; rows];
+    let mut padded_matrix: Vec<Vec<f64>> = vec![vec![0.0; cols]; rows];
     for i in 0..original_rows {
         for j in 0..original_cols {
             padded_matrix[i][j] = matrix[i][j];
@@ -205,14 +205,14 @@ fn pad_matrix(matrix: &[Vec<f64>], rows: usize, cols: usize) -> Vec<Vec<f64>> {
 
 /// Splits a matrix into four submatrices (quadrants)
 fn split_matrix(matrix: &[Vec<f64>]) -> (Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>, Vec<Vec<f64>>) {
-    let n = matrix.len();
-    let half_size = n / 2;
+    let n: usize = matrix.len();
+    let half_size: usize = n / 2;
 
     // Create four new submatrices
-    let mut a11 = vec![vec![0.0; half_size]; half_size];
-    let mut a12 = vec![vec![0.0; half_size]; half_size];
-    let mut a21 = vec![vec![0.0; half_size]; half_size];
-    let mut a22 = vec![vec![0.0; half_size]; half_size];
+    let mut a11: Vec<Vec<f64>> = vec![vec![0.0; half_size]; half_size];
+    let mut a12: Vec<Vec<f64>> = vec![vec![0.0; half_size]; half_size];
+    let mut a21: Vec<Vec<f64>> = vec![vec![0.0; half_size]; half_size];
+    let mut a22: Vec<Vec<f64>> = vec![vec![0.0; half_size]; half_size];
 
     // Fill submatrices by splitting the original matrix into quadrants
     for i in 0..half_size {
@@ -232,7 +232,7 @@ fn unpad_matrix(matrix: Vec<Vec<f64>>, rows: usize, cols: usize) -> Vec<Vec<f64>
     matrix
         .into_iter()
         .take(rows)
-        .map(|row| row.into_iter().take(cols).collect())
+        .map(|row: Vec<f64>| row.into_iter().take(cols).collect())
         .collect()
 }
 
@@ -259,14 +259,14 @@ unsafe fn simd_add_matrix_x86(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
 /// SIMD-optimized matrix addition for ARM (NEON)
 #[cfg(target_arch = "aarch64")]
 unsafe fn simd_add_matrix_arm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let mut result = vec![vec![0.0; n]; n];
+    let n: usize = a.len();
+    let mut result: Vec<Vec<f64>> = vec![vec![0.0; n]; n];
 
     for i in 0..n {
         for j in (0..n).step_by(2) {
-            let va = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
-            let vb = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
-            let vsum = vaddq_f64(va, vb);  // Perform addition
+            let va: float64x2_t = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
+            let vb: float64x2_t = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
+            let vsum: float64x2_t = vaddq_f64(va, vb);  // Perform addition
             vst1q_f64(&mut result[i][j], vsum);  // Store result
         }
     }
@@ -293,14 +293,14 @@ unsafe fn simd_sub_matrix_x86(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
 /// SIMD-optimized matrix subtraction for ARM (NEON)
 #[cfg(target_arch = "aarch64")]
 unsafe fn simd_sub_matrix_arm(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let mut result = vec![vec![0.0; n]; n];
+    let n: usize = a.len();
+    let mut result: Vec<Vec<f64>> = vec![vec![0.0; n]; n];
 
     for i in 0..n {
         for j in (0..n).step_by(2) {  // Process 2 elements at a time
-            let va = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
-            let vb = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
-            let vres = vsubq_f64(va, vb);  // Perform subtraction: a[i][j] - b[i][j]
+            let va: float64x2_t = vld1q_f64(&a[i][j]);  // Load 2 elements from matrix a
+            let vb: float64x2_t = vld1q_f64(&b[i][j]);  // Load 2 elements from matrix b
+            let vres: float64x2_t = vsubq_f64(va, vb);  // Perform subtraction: a[i][j] - b[i][j]
             vst1q_f64(&mut result[i][j], vres);  // Store the result
         }
     }
@@ -347,9 +347,9 @@ fn add_matrix(a: &[Vec<f64>], b: &[Vec<f64>]) -> Vec<Vec<f64>> {
 
 /// Strassen's matrix multiplication with a threshold for switching to traditional multiplication
 fn matrix_mult_strassen(a: &[Vec<f64>], b: &[Vec<f64>], threshold: usize) -> Vec<Vec<f64>> {
-    let n = a.len();
-    let m = b[0].len();
-    let p = b.len();
+    let n: usize = a.len();
+    let m: usize = b[0].len();
+    let p: usize = b.len();
 
     // Base case: Use traditional multiplication for small matrices
     if n <= threshold || m <= threshold || p <= threshold {
@@ -361,19 +361,19 @@ fn matrix_mult_strassen(a: &[Vec<f64>], b: &[Vec<f64>], threshold: usize) -> Vec
     let (b11, b12, b21, b22) = split_matrix(b);
 
     // Calculate the 7 Strassen products
-    let p1 = matrix_mult_strassen(&add_matrix(&a11, &a22), &add_matrix(&b11, &b22), threshold);
-    let p2 = matrix_mult_strassen(&add_matrix(&a21, &a22), &b11, threshold);
-    let p3 = matrix_mult_strassen(&a11, &sub_matrix(&b12, &b22), threshold);
-    let p4 = matrix_mult_strassen(&a22, &sub_matrix(&b21, &b11), threshold);
-    let p5 = matrix_mult_strassen(&add_matrix(&a11, &a12), &b22, threshold);
-    let p6 = matrix_mult_strassen(&sub_matrix(&a21, &a11), &add_matrix(&b11, &b12), threshold);
-    let p7 = matrix_mult_strassen(&sub_matrix(&a12, &a22), &add_matrix(&b21, &b22), threshold);
+    let p1: Vec<Vec<f64>> = matrix_mult_strassen(&add_matrix(&a11, &a22), &add_matrix(&b11, &b22), threshold);
+    let p2: Vec<Vec<f64>> = matrix_mult_strassen(&add_matrix(&a21, &a22), &b11, threshold);
+    let p3: Vec<Vec<f64>> = matrix_mult_strassen(&a11, &sub_matrix(&b12, &b22), threshold);
+    let p4: Vec<Vec<f64>> = matrix_mult_strassen(&a22, &sub_matrix(&b21, &b11), threshold);
+    let p5: Vec<Vec<f64>> = matrix_mult_strassen(&add_matrix(&a11, &a12), &b22, threshold);
+    let p6: Vec<Vec<f64>> = matrix_mult_strassen(&sub_matrix(&a21, &a11), &add_matrix(&b11, &b12), threshold);
+    let p7: Vec<Vec<f64>> = matrix_mult_strassen(&sub_matrix(&a12, &a22), &add_matrix(&b21, &b22), threshold);
 
     // Compute the values of the resulting submatrices
-    let c11 = add_matrix(&sub_matrix(&add_matrix(&p1, &p4), &p5), &p7);
-    let c12 = add_matrix(&p3, &p5);
-    let c21 = add_matrix(&p2, &p4);
-    let c22 = add_matrix(&sub_matrix(&add_matrix(&p1, &p3), &p2), &p6);
+    let c11: Vec<Vec<f64>> = add_matrix(&sub_matrix(&add_matrix(&p1, &p4), &p5), &p7);
+    let c12: Vec<Vec<f64>> = add_matrix(&p3, &p5);
+    let c21: Vec<Vec<f64>> = add_matrix(&p2, &p4);
+    let c22: Vec<Vec<f64>> = add_matrix(&sub_matrix(&add_matrix(&p1, &p3), &p2), &p6);
 
     // Merge the resulting submatrices into the final matrix
     merge_matrix(c11, c12, c21, c22)
@@ -381,21 +381,21 @@ fn matrix_mult_strassen(a: &[Vec<f64>], b: &[Vec<f64>], threshold: usize) -> Vec
 
 /// Strassen's matrix multiplication with padding for non-square matrices
 fn strassen_with_padding(a: &[Vec<f64>], b: &[Vec<f64>], threshold: usize) -> Vec<Vec<f64>> {
-    let a_rows = a.len();
-    let a_cols = a[0].len();
-    let b_rows = b.len();
-    let b_cols = b[0].len();
+    let a_rows: usize = a.len();
+    let a_cols: usize = a[0].len();
+    let b_rows: usize = b.len();
+    let b_cols: usize = b[0].len();
 
     // Determine the size needed (nearest power of two based on the largest dimensions)
-    let new_rows = next_power_of_two(a_rows.max(b_rows));
-    let new_cols = next_power_of_two(a_cols.max(b_cols));
+    let new_rows: usize = next_power_of_two(a_rows.max(b_rows));
+    let new_cols: usize = next_power_of_two(a_cols.max(b_cols));
 
     // Pad matrices if necessary
-    let a_padded = pad_matrix(a, new_rows, new_cols);
-    let b_padded = pad_matrix(b, new_rows, new_cols);
+    let a_padded: Vec<Vec<f64>> = pad_matrix(a, new_rows, new_cols);
+    let b_padded: Vec<Vec<f64>> = pad_matrix(b, new_rows, new_cols);
 
     // Perform Strassen's multiplication
-    let result_padded = matrix_mult_strassen(&a_padded, &b_padded, threshold);
+    let result_padded: Vec<Vec<f64>> = matrix_mult_strassen(&a_padded, &b_padded, threshold);
 
     // Unpad the result to get back to the original matrix size
     unpad_matrix(result_padded, a_rows, b_cols)
@@ -408,11 +408,11 @@ fn merge_matrix(
     c21: Vec<Vec<f64>>, 
     c22: Vec<Vec<f64>>
 ) -> Vec<Vec<f64>> {
-    let half_size = c11.len();  // Size of submatrices
-    let n = half_size * 2;      // Size of the full matrix
+    let half_size: usize = c11.len();  // Size of submatrices
+    let n: usize = half_size * 2;      // Size of the full matrix
 
     // Initialize the resulting matrix with the correct size
-    let mut result = vec![vec![0.0; n]; n];
+    let mut result: Vec<Vec<f64>> = vec![vec![0.0; n]; n];
 
     // Fill in the top-left (c11)
     for i in 0..half_size {
@@ -447,7 +447,7 @@ fn merge_matrix(
 
 #[pyfunction]
 fn sin(x: f64) -> PyResult<f64> {
-    let result = chebyshev_sin(x);
+    let result: f64 = chebyshev_sin(x);
     Ok(result)
 }
 
@@ -457,7 +457,7 @@ fn matrix_mult(a: Vec<Vec<f64>>, b: Vec<Vec<f64>>) -> PyResult<Vec<Vec<f64>>> {
     const THRESHOLD: usize = 2;
 
     // Perform Strassen's multiplication
-    let result = strassen_with_padding(&a, &b, THRESHOLD);
+    let result: Vec<Vec<f64>> = strassen_with_padding(&a, &b, THRESHOLD);
     Ok(result)
 }
 

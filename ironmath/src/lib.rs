@@ -475,6 +475,7 @@ fn dot_product(a: Vec<f32>, b: Vec<f32>) -> PyResult<f32> {
 
 #[pymodule]
 fn ferrox(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(sin, m)?)?;
     m.add_function(wrap_pyfunction!(matrix_mult, m)?)?;
     m.add_function(wrap_pyfunction!(dot_product, m)?)?;
     Ok(())

@@ -1,3 +1,5 @@
+#! /usr/bin/env python3
+
 import random
 
 face = lambda x: "Heads" if x == 1 else "Tails"

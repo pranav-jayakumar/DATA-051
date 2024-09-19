@@ -3,11 +3,12 @@ use::pyo3::wrap_pyfunction;
 
 /// Sorting algorithm but worse xd
 #[pyfunction]
-fn miguel_sort(arr: &[u32]) -> Vec<u32> {
-    let mut st  = vec![fasle; 2usize.pow(32)];
-    arr.into_iter().for_each(|&f| {
+fn miguel_sort(arr: Vec<u32>) -> Vec<u32> {
+    let mut st  = vec![false; 2usize.pow(32)];
+    for &f in & arr {
         set[f as usize] = true;
-    });
+    }
+
     set.into_iter()
         .enumerate()
         .filter(|&(_, b)| b)
@@ -17,7 +18,7 @@ fn miguel_sort(arr: &[u32]) -> Vec<u32> {
 
 /// A Python module implemented in Rust.
 #[pymodule]
-fn miguel_sort(m: &Bound<'_, PyModule>) -> PyResult<()> {
+fn miguel_sort_module(m: &PyModule<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(miguel_sort, m)?)?;
     Ok(())
 }

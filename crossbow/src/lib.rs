@@ -18,79 +18,81 @@ fn read_excel(file_path: &str, sheet_name: &str) -> Result<RecordBatch, Box<dyn 
     let mut fields = Vec::new();
     let mut columns: Vec<ArrayRef> = Vec::new();
 
-    if let Some(first_row) = range.rows().next() {
-        for col_idx in 0..range.get_size().1 {
-            let column_name = match &first_row[col_idx] {
-                DataType::String(s) => s.clone(),
-                _ => format!("column_{}", col_idx),
-            };
+    // Extract the header row separately
+    let header_row = range.rows().next().ok_or("Empty sheet or unable to read header")?;
+    
+    for col_idx in 0..header_row.len() {
+        let column_name = match &header_row[col_idx] {
+            DataType::String(s) => s.clone(),
+            _ => format!("column_{}", col_idx),
+        };
 
-            let mut int_builder = Int32Builder::new();
-            let mut float_builder = Float64Builder::new();
-            let mut str_builder = StringBuilder::new();
-            let mut bool_builder = BooleanBuilder::new();
+        let mut int_builder = Int32Builder::new();
+        let mut float_builder = Float64Builder::new();
+        let mut str_builder = StringBuilder::new();
+        let mut bool_builder = BooleanBuilder::new();
 
-            let mut is_int = true;
-            let mut is_float = true;
-            let mut is_str = true;
-            let is_bool = true;
+        let mut is_int = true;
+        let mut is_float = true;
+        let mut is_str = true;
+        let mut is_bool = true;
 
-            for (_row_idx, row) in range.rows().enumerate().skip(1) { // Skip the first row as it's used for column names
-                match &row[col_idx] {
-                    DataType::Int(v) => {
-                        int_builder.append_value(*v as i32);
-                        float_builder.append_value(*v as f64);
-                        str_builder.append_value(&v.to_string());
-                        bool_builder.append_value(*v != 0);
-                    }
-                    DataType::Float(v) => {
-                        is_int = false;
-                        float_builder.append_value(*v);
-                        str_builder.append_value(&v.to_string());
-                        bool_builder.append_value(*v != 0.0);
-                    }
-                    DataType::String(v) => {
-                        is_int = false;
-                        is_float = false;
-                        str_builder.append_value(v);
-                        bool_builder.append_value(v.to_lowercase() == "true" || v == "1");
-                    }
-                    DataType::Bool(v) => {
-                        is_int = false;
-                        is_float = false;
-                        is_str = false;
-                        bool_builder.append_value(*v);
-                        str_builder.append_value(&v.to_string());
-                    }
-                    _ => {
-                        int_builder.append_null();
-                        float_builder.append_null();
-                        str_builder.append_null();
-                        bool_builder.append_null();
-                    }
+        // Iterate over the data rows (skipping the header row)
+        for row in range.rows().skip(1) {
+            match &row[col_idx] {
+                DataType::Int(v) => {
+                    int_builder.append_value(*v as i32);
+                    float_builder.append_value(*v as f64);
+                    str_builder.append_value(&v.to_string());
+                    bool_builder.append_value(*v != 0);
+                }
+                DataType::Float(v) => {
+                    is_int = false;
+                    float_builder.append_value(*v);
+                    str_builder.append_value(&v.to_string());
+                    bool_builder.append_value(*v != 0.0);
+                }
+                DataType::String(v) => {
+                    is_int = false;
+                    is_float = false;
+                    str_builder.append_value(v);
+                    bool_builder.append_value(v.to_lowercase() == "true" || v == "1");
+                }
+                DataType::Bool(v) => {
+                    is_int = false;
+                    is_float = false;
+                    is_str = false;
+                    bool_builder.append_value(*v);
+                    str_builder.append_value(&v.to_string());
+                }
+                _ => {
+                    int_builder.append_null();
+                    float_builder.append_null();
+                    str_builder.append_null();
+                    bool_builder.append_null();
                 }
             }
-
-            let field: Field;
-            let array: ArrayRef;
-
-            if is_int {
-                field = Field::new(&column_name, ArrowDataType::Int32, true);
-                array = Arc::new(int_builder.finish());
-            } else if is_float {
-                field = Field::new(&column_name, ArrowDataType::Float64, true);
-                array = Arc::new(float_builder.finish());
-            } else if is_bool && !is_str {
-                field = Field::new(&column_name, ArrowDataType::Boolean, true);
-                array = Arc::new(bool_builder.finish());
-            } else {
-                field = Field::new(&column_name, ArrowDataType::Utf8, true);
-                array = Arc::new(str_builder.finish());
-            }
-
-            fields.push(field);
-            columns.push(array);
         }
+
+        let field: Field;
+        let array: ArrayRef;
+
+        if is_int {
+            field = Field::new(&column_name, ArrowDataType::Int32, true);
+            array = Arc::new(int_builder.finish());
+        } else if is_float {
+            field = Field::new(&column_name, ArrowDataType::Float64, true);
+            array = Arc::new(float_builder.finish());
+        } else if is_bool && !is_str {
+            field = Field::new(&column_name, ArrowDataType::Boolean, true);
+            array = Arc::new(bool_builder.finish());
+        } else {
+            field = Field::new(&column_name, ArrowDataType::Utf8, true);
+            array = Arc::new(str_builder.finish());
+        }
+
+        fields.push(field);
+        columns.push(array);
     }
 
     let schema = Arc::new(Schema::new(fields));
@@ -98,6 +100,7 @@ fn read_excel(file_path: &str, sheet_name: &str) -> Result<RecordBatch, Box<dyn 
 
     Ok(batch)
 }
+
 
 fn read_csv(file_path: &str) -> Result<RecordBatch, Box<dyn Error>> {
     let file = File::open(file_path)?;
